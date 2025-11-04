@@ -1,0 +1,217 @@
+# Basic continous integration for sdk-samples
+#    Copyright 2023 Labforge Inc.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+#
+# @author Thomas Reidemeister <thomas@labforge.ca>
+#
+# To setup a self-hosted runner to test this on Windows
+# (1) Setup a Windows 10 machine with autologin
+# (2) Register a Github actions runner on that machine, run from startup (not as headless service runner)
+# (3) Install
+#   - VS build tools,
+#   - Pleora SDK,
+#   - Python 3.10
+#   - Git for Windows
+# (4) Set up a private backing repository holding proprietary wheels and check this out using a CI token
+# (5) Set a repo actions secret for CITOKEN
+# (5) Tag that runner as W64HIL
+# (6) Allow for executing shell scripts https:/go.microsoft.com/fwlink/?LinkID=135170
+# (7) Setup code-signing (Talk to Thomas for credentials and headless approach)
+name: ContinousIntegration
+
+on:
+  push:
+    branches: [ ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0' # Run every Sunday at midnight
+
+jobs:
+  lint_python_samples:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+                      meson \
+                      build-essential \
+                      qtbase5-dev \
+                      python3-numpy \
+                      libopencv-dev \
+                      xorg \
+                      libxkbcommon0 \
+                      qt6-base-dev \
+                      libfontconfig1-dev \
+                      libfreetype6-dev \
+                      libx11-dev \
+                      libx11-xcb-dev \
+                      libxext-dev \
+                      libxfixes-dev \
+                      libxi-dev \
+                      libxrender-dev \
+                      libxkbcommon-dev \
+                      libxkbcommon-x11-dev \
+                      libatspi2.0-dev \
+                      '^libxcb.*-dev'
+      - name: Check out Pleora SDK backing
+        uses: actions/checkout@v4
+        with:
+          repository: labforge/pleora_backing
+          lfs: true
+          token: ${{ secrets.CITOKEN }}
+          submodules: true
+          path: pleora
+      - name: Install Pleora 22.04 SDK
+        run: |
+          sudo dpkg -i pleora/eBUS_SDK_Ubuntu-22.04-x86_64-6.3.0-6343.deb
+      - name: Check out samples
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+          path: samples
+      - name: Lint Python Modules
+        run: |
+          pushd samples
+          pip install pylint==3.0.3
+          for dir in */
+          do
+            if [ -d "$dir" ]
+            then
+              if [[ -f "${dir}requirements.txt" ]]; then
+                pushd ${dir}
+                echo "=== Linting ${dir} ==="
+                pip install -r requirements.txt
+                pylint --rcfile=../.pylintrc **/*.py **/*.py
+                popd
+              fi
+            fi
+          done
+          popd
+          
+
+  build_cpp_samples_linux:
+    runs-on: HIL
+    steps:
+      - name: Check out samples
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+          path: samples
+      - name: Build stereo_viewer
+        run: |
+          cd samples/stereo_viewer
+          meson build
+          ninja -C build
+
+# Note Ubuntu 20.04 LTS is no longer supported by Github actions
+#  # Confirm that build also works on legacy systems
+#  build_cpp_samples_ubuntu_20:
+#    runs-on: ubuntu-20.04
+#    steps:
+#      - name: Install OS dependencies
+#        run: |
+#          sudo apt-get update
+#          sudo apt-get install -y meson build-essential qtbase5-dev python3-numpy libopencv-dev
+#      - name: Check out Pleora SDK backing
+#        uses: actions/checkout@v4
+#        with:
+#          repository: labforge/pleora_backing
+#          lfs: true
+#          token: ${{ secrets.CITOKEN }}
+#          submodules: true
+#          path: pleora
+#      - name: Install Pleora 20.04 SDK
+#        run: |
+#          sudo dpkg -i pleora/eBUS_SDK_Ubuntu-20.04-x86_64-6.3.0-6343.deb
+#      - name: Check out samples
+#        uses: actions/checkout@v4
+#        with:
+#          lfs: true
+#          submodules: true
+#          path: samples
+#      - name: Build stereo_viewer
+#        run: |
+#          cd samples/stereo_viewer
+#          meson build
+#          ninja -C build
+
+  publish_sdk:
+    runs-on: HIL
+    needs: [ lint_python_samples ]
+    steps:
+    - name: Checkout head for release notes
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+        submodules: true
+    - name: Generate release notes
+      run: |
+        git describe --tags --abbrev=0 HEAD | xargs git log -1 --pretty=%B > release.txt
+    - name: Stage backing files
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+        submodules: true
+        repository: labforge/pleora_backing
+        token: ${{ secrets.CITOKEN }}
+        path: release
+    - name: Build SDK documentation to publish
+      run: |
+        cd release
+        ar x eBUS_SDK_Ubuntu-22.04-x86_64-6.3.0-6343.deb
+        tar xvzf data.tar.gz
+        cd opt/pleora/ebus_sdk/Ubuntu-22.04-x86_64/share/doc/python/
+        zip -r9ov ../../../../../../../api_docs.zip *
+        cd ../../../../../../../
+        # back to root from release
+        cd ..
+    - name: Assemble Windows SDK
+      run: |
+        cat release/eBUS_*.exea* > release/eBUS_SDK_Windows-64-bit.exe
+    - name: Release Public
+      uses: treideme/action-gh-release@master
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        fail_on_unmatched_files: true
+        files: |
+          release/*.whl
+          release/eBUS_SDK_Windows-64-bit.exe
+          release/*.deb
+          release/api_docs.zip
+        token: ${{ secrets.CITOKEN }}
+        body_path: release.txt
+
+  build_python_samples_and_installer:
+    runs-on: W64HIL
+    needs: [ lint_python_samples ]
+    steps:
+    - name: Check out samples
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+        submodules: true
+        path: samples
+
+    - name: Build samples
+      uses: ./samples/.github/actions/build
+      with:
+        artifact_name: installer
+        token: ${{ secrets.CITOKEN }}
+        path: samples
+        signpassword: ${{ secrets.SIGNINGPASSWORD }}

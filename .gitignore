@@ -1,0 +1,6 @@
+venv
+.idea
+*.obj
+distribution/build
+distribution/dist
+build
