@@ -29,8 +29,8 @@ import numpy as np
 
 # reference common utility files
 sys.path.insert(1, '../common')
-from chunk_parser import decode_chunk
-from connection import init_bottlenose, deinit_bottlenose
+from common.chunk_parser import decode_chunk
+from common.connection import init_bottlenose, deinit_bottlenose
 
 
 def parse_args():

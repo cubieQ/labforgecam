@@ -27,14 +27,14 @@ import argparse
 import cv2
 import numpy as np
 import eBUS as eb
-
+import time
 
 # reference common utility files
 sys.path.insert(1, '../common')
-from chunk_parser import decode_chunk
-from connection import init_bottlenose, deinit_bottlenose
+from common.chunk_parser import decode_chunk
+from common.connection import init_bottlenose, deinit_bottlenose
 
-import draw_chunkdata as chk
+import keypoints.draw_chunkdata as chk
 
 
 def parse_args():
@@ -145,9 +145,14 @@ def handle_buffer(pvbuffer, device):
         cvimage0 = cv2.cvtColor(image_data0, cv2.COLOR_YUV2BGR_YUY2)
         cvimage1 = cv2.cvtColor(image_data1, cv2.COLOR_YUV2BGR_YUY2)
 
-        if len(keypoints):
+        if len(keypoints) == 1:
+            print(f"ONLY LENGTH 1: {keypoints}")
+
+        if len(keypoints) == 2:
             cvimage0 = chk.draw_keypoints(cvimage0, keypoints[0])
+            #if len(keypoints) == 2:
             cvimage1 = chk.draw_keypoints(cvimage1, keypoints[1])
+
 
         display_image = np.hstack((cvimage0, cvimage1))
 

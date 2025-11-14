@@ -214,7 +214,7 @@ def run_demo(device, stream, weights_file):
 
 if __name__ == '__main__':
     mac_address = None
-    weights_file = (r"C:\Users\jhaase\Downloads\sdk-demos-master\sdk-demos-master\yolov3_1_416_416_3.tar")
+    weights_file = (r"C:\Users\jhaase\Downloads\models-master\models-master\models\yolov3_1_416_416_3.tar")
     if len(sys.argv) >= 2:
         weights_file = sys.argv[1]
     if len(sys.argv) >= 3:

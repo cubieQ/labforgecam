@@ -28,7 +28,7 @@ import numpy as np
 
 # reference common utility files
 sys.path.insert(1, '../common')
-from connection import init_bottlenose, deinit_bottlenose
+from common.connection import init_bottlenose, deinit_bottlenose
 
 
 def parse_args():
@@ -265,6 +265,9 @@ def handle_buffer(pvbuffer: eb.PvBuffer, invalid):
         image = pvbuffer.GetMultiPartContainer().GetPart(0).GetImage()
         disparity = pvbuffer.GetMultiPartContainer().GetPart(1).GetImage()
 
+        print(image_data)
+        input()
+
         image_data = image.GetDataPointer()
         disparity_data = disparity.GetDataPointer()
 
@@ -273,8 +276,8 @@ def handle_buffer(pvbuffer: eb.PvBuffer, invalid):
         display_image = np.hstack((cv_image, colored_map))
 
         cv2.imshow("Disparity", display_image)
-        print(f" iW: {image.GetWidth()} iH: {image.GetHeight()} ", end='')
-        print(f" dW: {disparity.GetWidth()} dH: {disparity.GetHeight()} ")
+        #print(f" iW: {image.GetWidth()} iH: {image.GetHeight()} ", end='')
+        #print(f" dW: {disparity.GetWidth()} dH: {disparity.GetHeight()} ")
 
 
 def acquire_data(device, stream, invalid):
